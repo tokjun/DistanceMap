@@ -26,15 +26,13 @@
 #include "itkImageFileWriter.h"
 #include "itkCastImageFilter.h"
 
-#include "itkDanielssonDistanceMapImageFilter.h"
+#include "itkSignedMaurerDistanceMapImageFilter.h"
 #include "itkRescaleIntensityImageFilter.h"
 
 #include "itkPluginUtilities.h"
 #include "DistanceMapCLP.h"
 
 #include "itkMultiplyByConstantImageFilter.h"
-#include "itkScaleVectorImageFilter.h"
-
 
 namespace {
 
@@ -53,24 +51,27 @@ template<class T> int DoIt( int argc, char * argv[], T )
   typedef   itk::ImageFileReader< InputImageType  >  ReaderType;
   typedef   itk::ImageFileWriter< OutputImageType > WriterType;
 
-  typedef   itk::DanielssonDistanceMapImageFilter<
+  typedef   itk::SignedMaurerDistanceMapImageFilter<
                InputImageType, OutputImageType >  DistanceMapFilterType;
-
-  typedef   typename DistanceMapFilterType::VectorImageType VectorImageType;
-
-  typedef   itk::ScaleVectorImageFilter<VectorImageType, OutputImageType> ScaleVectorImageType;
 
   typename ReaderType::Pointer reader = ReaderType::New();  
   typename WriterType::Pointer writer = WriterType::New();
   typename WriterType::Pointer voronoiWriter = WriterType::New();
   typename DistanceMapFilterType::Pointer filter = DistanceMapFilterType::New();
-  typename ScaleVectorImageType::Pointer scaler = ScaleVectorImageType::New();
 
   reader->SetFileName( inputVolume.c_str() );
   writer->SetFileName( outputVolume.c_str() );
 
   filter->SetInput( reader->GetOutput() );
-  filter->InputIsBinaryOn();
+  filter->SquaredDistanceOff();
+  if (physicalDistance)
+    {
+    filter->SetUseImageSpacing(true);
+    }
+  else
+    {
+    filter->SetUseImageSpacing(false);
+    }
 
   try
     {
@@ -82,31 +83,7 @@ template<class T> int DoIt( int argc, char * argv[], T )
     return EXIT_FAILURE ;
     }
 
-  // itk::DanielssonDistanceMapImageFilter does not take the pixel spacing into
-  // account. If the physicalDistance flag is on, we first obtain vector map,
-  // and then recalculate the physical distance map.
-  // See: http://www.itk.org/pipermail/insight-users/2003-October/005320.html
-  if (physicalDistance)
-    {
-    // Obtain pixel size
-    typename ScaleVectorImageType::VectorType scale;
-    typename InputImageType::SpacingType spacing = filter->GetOutput()->GetSpacing();
-    for (unsigned int i = 0; i < Dimension; i ++)
-      {
-      scale[i] = spacing[i];
-      }
-    std::cout << "original scale = ("
-              << scale[0] << ", "
-              << scale[1] << ", "
-              << scale[2] << ")" << std::endl;
-    scaler->SetScaleVector (scale);
-    scaler->SetInput( filter->GetVectorDistanceMap() );
-    writer->SetInput( scaler->GetOutput() );
-    }
-  else
-    {
-    writer->SetInput( filter->GetOutput() );
-    }
+  writer->SetInput( filter->GetOutput() );
   
   try
     {
